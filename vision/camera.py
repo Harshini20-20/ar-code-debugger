@@ -6,56 +6,72 @@ from debugger.syntax_checker import check_syntax
 
 def start_camera():
 
-    cap = cv2.VideoCapture(0)
+    # 📱 IP Webcam URL (CHANGE if your IP changes)
+    url = "http://192.168.1.16:8080/video"
+
+    # 🎥 Open stream
+    cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
 
     error_line = None
+    error = None
     boxes = []
 
     if not cap.isOpened():
-        print("Error: Cannot open camera")
+        print("❌ Error: Cannot open camera")
         return
+
+    print("✅ Camera started. Press 'S' to scan, 'Q' to quit.")
 
     while True:
         ret, frame = cap.read()
 
         if not ret:
-            break
+            print("⚠️ Frame dropped... retrying")
+            continue
 
-        # Draw error overlay if available
-        if error_line is not None and error_line < len(boxes):
+        # 🟥 Draw error overlay
+        if error_line is not None and error is not None and error_line < len(boxes):
 
             box = boxes[error_line]
 
-            x = int(box[0][0])
-            y = int(box[0][1])
+            x1, y1 = int(box[0][0]), int(box[0][1])
+            x2, y2 = int(box[2][0]), int(box[2][1])
 
-            cv2.rectangle(frame, (x-10, y-10), (x+300, y+30), (0,0,255), 2)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
 
-            cv2.putText(frame,error,(x,y-20),cv2.FONT_HERSHEY_SIMPLEX,0.6,(0,0,255),2)
-
+            cv2.putText(
+                frame,
+                error,
+                (x1, y1 - 10),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 0, 255),
+                2
+            )
+        frame = cv2.resize(frame, (640, 480))   # smaller size
         cv2.imshow("AR Debugger - Live Feed", frame)
 
         key = cv2.waitKey(1) & 0xFF
 
-        # Press S to scan code
+        # 📸 Press S to scan code
         if key == ord('s'):
 
             image_path = "captured_code.png"
 
-            # Get frame dimensions
             h, w, _ = frame.shape
 
-            # Crop center region where code is likely located
-            crop = frame[int(h*0.35):int(h*0.75), int(w*0.15):int(w*0.85)]
+            # ✂️ Crop center region
+            crop = frame[int(h * 0.35):int(h * 0.75),
+                         int(w * 0.15):int(w * 0.85)]
 
-            # Convert cropped region to grayscale
+            # ⚫ Convert to grayscale
             gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
 
-            # Save the processed image
             cv2.imwrite(image_path, gray)
 
-            print("IMAGE CAPTURED!")
+            print("\n📸 IMAGE CAPTURED!")
 
+            # 🔍 OCR
             ocr_lines = extract_text(image_path)
 
             texts = []
@@ -67,22 +83,27 @@ def start_camera():
 
             cleaned = clean_code(texts)
 
-            print("\nDetected text:")
+            print("\n🧾 Detected text:")
             for line in cleaned:
                 print(line)
 
+            # 🐞 Syntax check
             error = check_syntax(cleaned)
 
-            print("\nDEBUG RESULT:")
+            print("\n🛠 DEBUG RESULT:")
             print(error)
 
-            # detect line number
-            if "line" in error:
+            # 🔍 Extract error line
+            error_line = None
+            if error and "line" in error:
                 try:
-                    error_line = int(error.split("line")[1].split(":")[0].strip()) - 1
+                    error_line = int(
+                        error.split("line")[1].split(":")[0].strip()
+                    ) - 1
                 except:
                     error_line = None
 
+        # ❌ Quit
         elif key == ord('q'):
             break
 
